@@ -17,10 +17,9 @@ cd appointment-booking-service
 ```bash
 docker-compose up --build
 ```
-http://localhost:3000/api
 3. Access Services
 - **API**: http://localhost:3000
-- **SWAGGER**: http://localhost:3000/api#/
+- **Swagger**: http://localhost:3000/api#/
 
 4. Stop the Application
 ```bash
