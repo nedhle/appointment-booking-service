@@ -1,41 +1,56 @@
-# Build stage
+# --- Build Stage ---
 FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
+# Install system dependencies
 RUN apk add --no-cache bash postgresql-client
 
-# Copy only package files and prisma
+# Copy package files and prisma schema
 COPY package*.json ./
-COPY prisma ./prisma/
+COPY prisma ./prisma
 
 # Install dependencies
 RUN npm ci
 
-# Copy all source code
+# Copy the rest of the application
 COPY . .
 
-# Generate Prisma client and build
-RUN npx prisma generate && npm run build
+# Generate Prisma client and build the app
+RUN npx prisma generate && \
+    npm run build
 
-# Runtime stage
+# --- Production Runtime Stage ---
 FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
+# Install runtime dependencies
 RUN apk add --no-cache bash postgresql-client
 
-# Copy only what's needed from builder
-COPY --from=builder /usr/src/app/node_modules ./node_modules
+# Copy built app, dependencies and necessary files from builder
 COPY --from=builder /usr/src/app/dist ./dist
-COPY --from=builder /usr/src/app/package*.json ./
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/package.json ./
+COPY --from=builder /usr/src/app/prisma ./prisma
+COPY prisma ./prisma
 
-# Expose port
+
+# Expose app port
 EXPOSE 3000
 
 # Set environment variables
-ENV NODE_ENV=production
-ENV DATABASE_URL="postgresql://postgres:postgres@db:5432/appointment_db"
+ENV DATABASE_URL="postgresql://postgres:postgres@db:5432/appointment_db" \
+    PORT=3000 \
+    NODE_ENV=production
 
-# Run app
-CMD ["node", "dist/main"]
+CMD sh -c '\
+  echo "Waiting for DB..."; \
+  until pg_isready -h db -p 5432 -U postgres; do sleep 2; done; \
+  echo "DB ready, running migrations..."; \
+  npx prisma generate && \
+  npx prisma migrate deploy && \
+  echo "Starting app..."; \
+  npm run start:prod \
+'
+
