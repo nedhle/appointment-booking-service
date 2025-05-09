@@ -1,0 +1,50 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Provider {
+  id                   String        @id @default(uuid())
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  weeklySchedule      Json          // Stores the weekly schedule as JSON
+  appointmentDuration Int           @default(30) // in minutes
+  timezone            String
+  appointments        Appointment[]
+
+  @@map("providers")
+}
+
+model Appointment {
+  id           String            @id @default(uuid())
+  startTime    DateTime @db.Timestamptz
+  endTime      DateTime @db.Timestamptz
+  status       AppointmentStatus @default(CONFIRMED)
+  patientId    String
+  providerId   String
+  createdAt    DateTime          @default(now()) @db.Timestamptz
+  updatedAt    DateTime          @updatedAt @db.Timestamptz
+
+  provider    Provider          @relation(fields: [providerId], references: [id])
+
+  @@index([patientId])
+  @@index([providerId])
+  @@index([providerId, startTime])
+  @@index([status])
+  @@map("appointments")
+}
+
+enum AppointmentStatus {
+  CONFIRMED
+  CANCELLED
+  RESCHEDULED
+
+  @@map("appointment_status")
+}
