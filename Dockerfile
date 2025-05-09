@@ -9,8 +9,9 @@ RUN apk add --no-cache bash postgresql-client && \
     adduser -S appuser -G appgroup
 
 # Copy package files and prisma schema
-COPY --chown=appuser:appgroup package*.json ./
+COPY --chown=appuser:appgroup package*.json ./ 
 COPY --chown=appuser:appgroup prisma ./prisma/
+COPY --chown=appuser:appgroup . .
 
 # Install dependencies
 RUN npm ci
@@ -27,20 +28,25 @@ WORKDIR /usr/src/app
 # Install runtime dependencies
 RUN apk add --no-cache bash postgresql-client
 
-# Create entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Copy compiled files and node_modules from build stage
+COPY --from=builder /usr/src/app /usr/src/app
 
-# Expose application port
+# Expose port
 EXPOSE 3000
 
-# Set default environment variables
+# Set env vars
 ENV DATABASE_URL="postgresql://postgres:postgres@db:5432/appointment_db" \
     PORT=3000 \
     NODE_ENV=production
 
-# Use the entrypoint script
-ENTRYPOINT ["docker-entrypoint.sh"]
-
-# Default command
-CMD ["npm", "run", "start:prod"]
+# Wait for DB and run app
+CMD sh -c '\
+  echo "Starting app..."; \
+  until pg_isready -h db -p 5432 -U postgres; do \
+    echo "Waiting for DB..."; \
+    sleep 2; \
+  done; \
+  npx prisma generate && \
+  npx prisma migrate deploy && \
+  npm run start:prod \
+'
